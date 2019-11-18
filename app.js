@@ -12,17 +12,16 @@ require('dotenv').config();
     console.timeLog('Report', `Work for ${cfg.params.banks.filter(x => x.enable).length} banks started`)
     const client = await MongoClient.connect(cfg.params.mongoURL, cfg.params.mongoOpts)
     const db = client.db('express')
-    const report = await cfg.params.banks.filter(x => x.enable).reduce(async (accReport, bank) => { //генерация массива [банк,docUrl,xlsUrl] для отправки письма
+    const report = await cfg.params.banks.filter(x => x.enable).reduce(async (accReport, bank) => { 
         try {
             const _report = await accReport;
-            const details = bank.calculateType === 'standart' ?  //для каждого банка создан свой тип работы, standart обращается к req, api - в aws
+            const details = bank.calculateType === 'standart' ?  
                 await db.collection('req').aggregate(cfg.detailQuery(bank._id, bank.reqStatuses)).toArray() :
                 await api.getUsage(cfg.params.stDt,cfg.params.enDt, bank.customerName, bank.usagePlanId)
-            //для экономии ресурса проверяется необходима ли группировка данных в акте по ручным,контрольным запросам и ЕГРН
             const data = bank.consolidated ? { consolidated: await db.collection('req').aggregate(cfg.groupQuery(bank._id, bank.reqStatuses)).toArray(), details } : { details }
             const docbuf = await makeDoc(data, bank)
             const xlsbuf = bank.calculateType === 'standart' ? 
-                await makeExcel(data.details, cfg.params.expressTblCnfg) : //передаём детализацию и необходимые поля таблицы
+                await makeExcel(data.details, cfg.params.expressTblCnfg) : 
                 await makeExcel(data.details.map((x,i)=>{return {date:`${i+1<10?0:''}${i+1}.${cfg.getMonthYear()}`,count:x[0]}}), cfg.params.apiTblCnfg)
             docUrl = await sendFile(bank._id, docbuf, 'doc')
             xlsUrl = await sendFile(bank._id, xlsbuf, 'xlsx') 
